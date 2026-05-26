@@ -8,7 +8,40 @@ import SettingsScreen from "./SettingsScreen";
 const T={bg:"#070707",s1:"#0f0f0f",s2:"#161616",s3:"#1d1d1d",br:"#222",br2:"#2c2c2c",acc:"#c9f13a",accDk:"#162300",accMd:"#324f00",txt:"#f0f0f0",sub:"#6a6a6a",dim:"#2a2a2a",bl:"#5ca4f8",blDk:"#0b1e3e",or:"#fb923c",orDk:"#281000",rd:"#f87171"};
 
 const GIFS: Record<string,string>={goblet:"https://www.inspireusafoundation.org/wp-content/uploads/2022/08/goblet-squat.gif",stiff:"https://www.inspireusafoundation.org/wp-content/uploads/2022/01/romanian-deadlift.gif","leg press":"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/leg-press.gif",extensora:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/leg-extension.gif","panturrilha em p":"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/standing-calf-raise.gif","panturrilha sentada":"https://www.inspireusafoundation.org/wp-content/uploads/2022/04/seated-calf-raise.gif",supino:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/dumbbell-bench-press.gif",remada:"https://www.inspireusafoundation.org/wp-content/uploads/2022/04/seated-cable-row.gif",desenvolvimento:"https://www.inspireusafoundation.org/wp-content/uploads/2022/04/seated-dumbbell-shoulder-press.gif",puxada:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/lat-pulldown.gif",rosca:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/barbell-curl.gif",triceps:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/tricep-pushdown.gif",prancha:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/plank.gif","dead bug":"https://www.inspireusafoundation.org/wp-content/uploads/2022/09/dead-bug.gif",pallof:"https://www.inspireusafoundation.org/wp-content/uploads/2022/08/pallof-press.gif","mesa flexora":"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/lying-leg-curl.gif",afundo:"https://www.inspireusafoundation.org/wp-content/uploads/2022/03/lunge.gif",agachamento:"https://www.inspireusafoundation.org/wp-content/uploads/2022/01/barbell-squat.gif"};
-function getGif(n: string){const l=n.toLowerCase();for(const[k,u]of Object.entries(GIFS))if(l.includes(k))return u;return null;}
+type ExerciseGif={url:string;source:string;sourceUrl?:string;matchedName?:string};
+const gifCache=new Map<string,ExerciseGif|null>();
+function getLocalGif(n: string): ExerciseGif|null{const l=n.toLowerCase();for(const[k,u]of Object.entries(GIFS))if(l.includes(k))return{url:u,source:"Inspire US"};return null;}
+
+function useExerciseGif(name: string){
+  const cacheKey=name.toLowerCase().trim();
+  const[gif,setGif]=useState<ExerciseGif|null>(()=>gifCache.get(cacheKey)??getLocalGif(name));
+
+  useEffect(()=>{
+    let alive=true;
+    const cached=gifCache.get(cacheKey);
+    if(cached!==undefined){setGif(cached??getLocalGif(name));return;}
+
+    const local=getLocalGif(name);
+    setGif(local);
+
+    fetch(`/api/exercise-gif?name=${encodeURIComponent(name)}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        if(!alive)return;
+        const remote=d?.gifUrl?{url:d.gifUrl,source:d.source||"ExerciseDB",sourceUrl:d.sourceUrl,matchedName:d.name}:local;
+        gifCache.set(cacheKey,remote);
+        setGif(remote);
+      })
+      .catch(()=>{
+        if(!alive)return;
+        gifCache.set(cacheKey,local);
+      });
+
+    return()=>{alive=false;};
+  },[cacheKey,name]);
+
+  return gif;
+}
 
 const TIPS: Record<string,string[]>={
   "goblet|agachamento":["Peito alto durante todo o movimento — se o tronco cair, o core perdeu tensão","Joelhos seguem os dedos dos pés, nunca colapsam para dentro","Excêntrico 2-3s (descida lenta) + concêntrico explosivo — esse contraste cria força","Respira fundo antes de descer (Valsalva), expira ao subir pelo ponto mais difícil"],
@@ -49,6 +82,35 @@ const SAMPLE={fase_atual:"Build",semanas_para_maratona:8,tipo_de_semana:"Reentra
 const NUTRI={objetivo:"Déficit moderado — perda de gordura mantendo performance",calorias:2400,proteina_g:180,carbo_g:260,gordura_g:70,refeicoes:[{nome:"Café da manhã",horario:"06:45",kcal:520,proteina:28,itens:["3 ovos mexidos","2 fatias pão integral","1 banana","Café sem açúcar"]},{nome:"Almoço",horario:"12:30",kcal:680,proteina:52,itens:["150g frango grelhado","120g arroz integral (cru)","Salada verde à vontade","1 col sopa azeite"]},{nome:"Pré-treino (se tarde)",horario:"16:00",kcal:220,proteina:6,itens:["1 banana","30g aveia","Café ou cafeína 200mg"]},{nome:"Shake + Janta",horario:"19:30",kcal:620,proteina:58,itens:["1 scoop whey (30g prot)","150g batata doce","100g legumes refogados","100g carne ou peixe"]}],hidratacao:"3 a 3.5L/dia. Adiciona 500ml por hora de treino",suplementos:["Whey pós-treino","Creatina 5g/dia (qualquer hora)","Cafeína 200mg pré-treino (opcional)"],nota:"Longo sábado: café + banana ou pão com mel 45min antes. Água com sal se ultrapassar 75min correndo."};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const asObj=(v: unknown): Record<string, any>|null=>v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string, any>:null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pickWorkoutPlan(p: Record<string, any>){
+  const treino=asObj(p.treino)||asObj(p.workout)||asObj(p.plano_treino);
+  if(treino?.dias)return treino;
+  if(p.dias)return p;
+  return null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function pickNutritionPlan(p: Record<string, any>){
+  const nested=asObj(p.alimentacao)||asObj(p.nutricao)||asObj(p.nutri)||asObj(p.plano_alimentar)||asObj(p.meal_plan);
+  const src=nested||p;
+  const diasAlimentacao=src.dias_alimentacao||src.alimentacao_semana||src.refeicoes_semana||src.cardapio_semanal||src.dias;
+  const hasNutri=src.refeicoes||diasAlimentacao||src.objetivo||src.calorias||src.hidratacao||src.suplementos||src.lista_compras;
+  if(!hasNutri)return null;
+  return {...src,dias_alimentacao:Array.isArray(diasAlimentacao)?diasAlimentacao:src.dias_alimentacao};
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyImportedPlan(p: Record<string, any>, currentNutri: any){
+  const workout=pickWorkoutPlan(p);
+  const nutrition=pickNutritionPlan(p);
+  if(!workout&&!nutrition)throw new Error("JSON deve ter treino em 'dias'/'treino.dias' e/ou alimentação em 'refeicoes', 'dias_alimentacao' ou 'alimentacao.dias'.");
+  return{workout,nutrition:nutrition?{...currentNutri,...nutrition}:null};
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function WorkoutApp(){
   const[tab,setTab]=useState("semana");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,14 +131,19 @@ export default function WorkoutApp(){
   const[chatLd,setChatLd]=useState(false);
   const[jsonIn,setJsonIn]=useState("");
   const[jsonErr,setJsonErr]=useState("");
+  const[nutriDayIdx,setNutriDayIdx]=useState(0);
   const iv=useRef<ReturnType<typeof setInterval>|null>(null);
   const chatEnd=useRef<HTMLDivElement|null>(null);
 
   useEffect(()=>{
+    sg("wla_plan").then(v=>{if(v)setData(v);});
+    sg("wla_nutri").then(v=>{if(v)setNutri(v);});
     sg("wla_loads").then(v=>{if(v)setLoads(v as Record<string,string>);});
     sg("wla_st").then(v=>{if(v)setSt(v as Record<string,boolean>);});
     sg("wla_grest").then(v=>{if(v!=null)setGRest(v as number);});
   },[]);
+  useEffect(()=>{sw("wla_plan",data);},[data]);
+  useEffect(()=>{sw("wla_nutri",nutri);},[nutri]);
   useEffect(()=>{if(Object.keys(loads).length)sw("wla_loads",loads);},[loads]);
   useEffect(()=>{if(Object.keys(st).length)sw("wla_st",st);},[st]);
   useEffect(()=>{sw("wla_grest",gRest);},[gRest]);
@@ -113,7 +180,7 @@ export default function WorkoutApp(){
         return;
       }
 
-      const sys=`Voce e um coach completo com duas especialidades:\n1. PERSONAL TRAINER — treino hibrido (forca + corrida), preparacao maratona\n2. NUTRICIONISTA ESPORTIVO — composicao corporal, performance endurance\n\nPerfil: Lucas Azevedo, 30 anos, 173cm, ~77kg, 35% gordura.\nMetas: maratona julho/2026, 15km a 5:30/km dezembro/2026, reduzir gordura.\nRotina: treina 05:35-06:30 em Sao Caetano do Sul. Sauna no almoco alguns dias. Garmin 565, Strava, Hevy. Max 4 refeicoes/dia + whey.\n\nTreino atual: ${JSON.stringify(data)}\nNutricao atual: ${JSON.stringify(nutri)}\n\nSempre em portugues. Direto e pratico.\nTreino → personal. Alimentacao → nutricionista. Pode misturar.\nNovo treino em JSON: mesmo formato com dias[]. Novo plano nutri JSON: mesmo formato com refeicoes[].`;
+      const sys=`Voce e um coach completo com duas especialidades:\n1. PERSONAL TRAINER — treino hibrido (forca + corrida), preparacao maratona\n2. NUTRICIONISTA ESPORTIVO — composicao corporal, performance endurance\n\nPerfil: Lucas Azevedo, 30 anos, 173cm, ~77kg, 35% gordura.\nMetas: maratona julho/2026, 15km a 5:30/km dezembro/2026, reduzir gordura.\nRotina: treina 05:35-06:30 em Sao Caetano do Sul. Sauna no almoco alguns dias. Garmin 565, Strava, Hevy. Max 4 refeicoes/dia + whey.\n\nPacote semanal atual: ${JSON.stringify({treino:data,alimentacao:nutri})}\n\nSempre em portugues. Direto e pratico.\nTreino → personal. Alimentacao → nutricionista. Pode misturar.\nSe o usuario pedir lista de compras, use toda a alimentacao semanal importada e agrupe por categoria, somando quantidades quando possivel.\nNovo pacote semanal em JSON: prefira o formato {\"treino\":{\"dias\":[]},\"alimentacao\":{\"dias\":[{\"dia\":\"Segunda\",\"refeicoes\":[]}]}}. Tambem aceito treino top-level com dias[] e nutricao com refeicoes[] para plano diario.`;
 
       const res=await fetch("/api/chat",{
         method:"POST",
@@ -133,7 +200,7 @@ export default function WorkoutApp(){
         const reply=d.reply||"Erro.";
         setChat(p=>[...p,{role:"assistant",content:reply}]);
         const m=reply.match(/```json\s*([\s\S]*?)```/);
-        if(m){try{const p=JSON.parse(m[1]);if(p.dias)setData(p);if(p.refeicoes)setNutri((prev: typeof NUTRI)=>({...prev,...p}));}catch{}}
+        if(m){try{const p=JSON.parse(m[1]);const next=applyImportedPlan(p,nutri);if(next.workout)setData(next.workout);if(next.nutrition)setNutri(next.nutrition);}catch{}}
       }
     }catch{setChat(p=>[...p,{role:"assistant",content:"Erro de conexão. Tenta de novo."}]);}
     setChatLd(false);
@@ -142,14 +209,17 @@ export default function WorkoutApp(){
   const loadJSON=()=>{
     try{
       const p=JSON.parse(jsonIn);
-      if(!p.dias&&!p.refeicoes)throw new Error("JSON deve ter 'dias' (treino) e/ou 'refeicoes' (nutrição).");
-      if(p.dias)setData(p);
-      if(p.refeicoes)setNutri((prev: typeof NUTRI)=>({...prev,...p}));
+      const next=applyImportedPlan(p,nutri);
+      if(next.workout)setData(next.workout);
+      if(next.nutrition){setNutri(next.nutrition);setNutriDayIdx(0);}
       setJsonErr("");setJsonIn("");setShowJson(false);
     }catch(e){setJsonErr((e as Error).message);}
   };;
 
   const days=data.dias||[];
+  const nutriDays=Array.isArray(nutri.dias_alimentacao)?nutri.dias_alimentacao:[];
+  const selectedNutriDay=nutriDays[nutriDayIdx]||null;
+  const displayedMeals=Array.isArray(selectedNutriDay?.refeicoes)?selectedNutriDay.refeicoes:Array.isArray(nutri.refeicoes)?nutri.refeicoes:[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const selDay=dayIdx!=null?days[dayIdx] as any:null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -164,7 +234,7 @@ export default function WorkoutApp(){
     const tot=ex.series||1;
     const doneN=Array.from({length:tot}).filter((_,i)=>st[`${di}_${exKey}_${i}`]).length;
     const allDone=doneN===tot;
-    const gif=getGif(ex.exercicio);
+    const gif=useExerciseGif(ex.exercicio);
     const isExp=expEx===`${di}_${exKey}`;
     const loadVal=loads[ex.exercicio]||"";
     const tips=getTips(ex.exercicio);
@@ -172,8 +242,11 @@ export default function WorkoutApp(){
     return(
       <div style={{background:allDone?T.accDk:T.s2,border:`1px solid ${allDone?T.accMd:T.br}`,borderRadius:18,marginBottom:14,overflow:"hidden"}}>
         {gif&&(
-          <div style={{width:"100%",height:210,background:"#040404",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-            <img src={gif} alt={ex.exercicio} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={(e)=>{(e.target as HTMLImageElement).parentElement!.style.display="none";}}/>
+          <div style={{width:"100%",height:210,background:"#040404",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",position:"relative"}}>
+            <img src={gif.url} alt={ex.exercicio} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={(e)=>{(e.target as HTMLImageElement).parentElement!.style.display="none";}}/>
+            <div style={{position:"absolute",right:8,bottom:8,background:"rgba(0,0,0,.68)",border:`1px solid ${T.br}`,borderRadius:8,padding:"3px 7px",fontSize:10,color:T.sub}}>
+              GIF: {gif.source}
+            </div>
           </div>
         )}
         <div style={{padding:"16px 16px 14px"}}>
@@ -280,27 +353,29 @@ export default function WorkoutApp(){
             {showJson&&(()=>{
               let parsed: Record<string,unknown>|null=null;
               try{parsed=JSON.parse(jsonIn);}catch{}
-              const hasDias=!!(parsed&&parsed.dias);
-              const hasNutri=!!(parsed&&(parsed as Record<string,unknown>).refeicoes);
+              const parsedObj=parsed as Record<string, unknown>|null;
+              const hasDias=!!(parsedObj&&(parsedObj.dias||asObj(parsedObj.treino)?.dias||asObj(parsedObj.plano_treino)?.dias));
+              const nestedNutri=parsedObj&&(asObj(parsedObj.alimentacao)||asObj(parsedObj.nutricao)||asObj(parsedObj.nutri)||asObj(parsedObj.plano_alimentar));
+              const hasNutri=!!(parsedObj&&(parsedObj.refeicoes||parsedObj.dias_alimentacao||parsedObj.alimentacao_semana||nestedNutri?.refeicoes||nestedNutri?.dias||nestedNutri?.dias_alimentacao));
               return(
               <div style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:14,padding:"14px",marginBottom:14}}>
                 <div style={{fontSize:13,color:T.sub,marginBottom:8,lineHeight:1.5}}>
                   Cole o JSON gerado pelo Coach ou pelas skills.<br/>
-                  <span style={{color:"#aaa"}}>Aceita <strong style={{color:T.bl}}>treino</strong> (<code>dias</code>), <strong style={{color:T.or}}>nutrição</strong> (<code>refeicoes</code>) ou os dois juntos.</span>
+                  <span style={{color:"#aaa"}}>Aceita <strong style={{color:T.bl}}>treino semanal</strong> (<code>treino.dias</code> ou <code>dias</code>) e <strong style={{color:T.or}}>alimentação semanal</strong> (<code>alimentacao.dias</code> ou <code>dias_alimentacao</code>).</span>
                 </div>
                 {jsonIn&&(hasDias||hasNutri)&&(
                   <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
                     {hasDias&&<span style={{fontSize:11,background:T.blDk,color:T.bl,border:`1px solid ${T.bl}33`,borderRadius:6,padding:"3px 10px",fontWeight:700}}>🏋 Treino detectado</span>}
-                    {hasNutri&&<span style={{fontSize:11,background:T.orDk,color:T.or,border:`1px solid ${T.or}33`,borderRadius:6,padding:"3px 10px",fontWeight:700}}>🥗 Nutrição detectada</span>}
+                    {hasNutri&&<span style={{fontSize:11,background:T.orDk,color:T.or,border:`1px solid ${T.or}33`,borderRadius:6,padding:"3px 10px",fontWeight:700}}>🥗 Alimentação detectada</span>}
                   </div>
                 )}
                 <textarea value={jsonIn} onChange={e=>setJsonIn(e.target.value)}
-                  placeholder={'{\n  "dias": [...],\n  "refeicoes": [...]\n}'}
+                  placeholder={'{\n  "treino": { "dias": [...] },\n  "alimentacao": {\n    "dias": [\n      { "dia": "Segunda", "refeicoes": [...] }\n    ]\n  }\n}'}
                   style={{width:"100%",height:140,background:T.s1,border:`1px solid ${T.br}`,borderRadius:10,padding:"10px",fontSize:12,color:T.txt,fontFamily:"monospace",resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
                 {jsonErr&&<div style={{color:T.rd,fontSize:12,margin:"6px 0"}}>{jsonErr}</div>}
                 <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
                   <button onClick={loadJSON} style={{background:T.acc,color:"#000",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:800,cursor:"pointer"}}>Carregar</button>
-                  <button onClick={()=>setJsonIn(JSON.stringify({...data,refeicoes:nutri.refeicoes,objetivo:nutri.objetivo,calorias:nutri.calorias,proteina_g:nutri.proteina_g,carbo_g:nutri.carbo_g,gordura_g:nutri.gordura_g,hidratacao:nutri.hidratacao,suplementos:nutri.suplementos,nota:nutri.nota},null,2))} style={{background:"none",border:`1px solid ${T.br}`,color:T.sub,borderRadius:10,padding:"10px 14px",fontSize:13,cursor:"pointer"}}>Ver treino+nutri atual</button>
+                  <button onClick={()=>setJsonIn(JSON.stringify({treino:data,alimentacao:nutri},null,2))} style={{background:"none",border:`1px solid ${T.br}`,color:T.sub,borderRadius:10,padding:"10px 14px",fontSize:13,cursor:"pointer"}}>Ver pacote atual</button>
                 </div>
               </div>
               );
@@ -450,7 +525,10 @@ export default function WorkoutApp(){
         {/* NUTRIÇÃO */}
         {tab==="nutri"&&(
           <div>
-            <div style={{fontSize:12,color:T.sub,marginBottom:14,lineHeight:1.5}}>{nutri.objetivo}</div>
+            <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start",marginBottom:14}}>
+              <div style={{fontSize:12,color:T.sub,lineHeight:1.5,flex:1}}>{nutri.objetivo}</div>
+              {nutriDays.length>0&&<div style={{fontSize:11,background:T.orDk,color:T.or,border:`1px solid ${T.or}33`,borderRadius:8,padding:"4px 9px",fontWeight:700,whiteSpace:"nowrap"}}>{nutriDays.length} dias</div>}
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
               {[["Kcal",nutri.calorias,""],["Proteína",nutri.proteina_g,"g"],["Carboidrato",nutri.carbo_g,"g"],["Gordura",nutri.gordura_g,"g"]].map(([l,v,u])=>(
                 <div key={String(l)} style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:14,padding:"14px 16px"}}>
@@ -459,8 +537,25 @@ export default function WorkoutApp(){
                 </div>
               ))}
             </div>
+            {nutriDays.length>0&&(
+              <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:14,paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {nutriDays.map((d: any,i: number)=>(
+                  <button key={i} onClick={()=>setNutriDayIdx(i)}
+                    style={{flexShrink:0,background:nutriDayIdx===i?T.or:T.s2,border:`1px solid ${nutriDayIdx===i?T.or:T.br}`,borderRadius:10,padding:"8px 14px",color:nutriDayIdx===i?"#000":T.sub,fontSize:13,fontWeight:nutriDayIdx===i?800:400,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                    {d.dia||`Dia ${i+1}`}
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedNutriDay&&(
+              <div style={{background:T.orDk,border:`1px solid ${T.or}44`,borderRadius:14,padding:"12px 14px",marginBottom:14}}>
+                <div style={{fontSize:17,fontWeight:800,color:T.or,marginBottom:4}}>{selectedNutriDay.dia||"Dia selecionado"} {selectedNutriDay.data_referencia&&<span style={{fontSize:12,fontWeight:400,color:T.sub}}>{selectedNutriDay.data_referencia}</span>}</div>
+                {selectedNutriDay.observacao&&<div style={{fontSize:12,color:T.or,lineHeight:1.5}}>{selectedNutriDay.observacao}</div>}
+              </div>
+            )}
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-            {nutri.refeicoes.map((r: any,i: number)=>(
+            {displayedMeals.map((r: any,i: number)=>(
               <div key={i} style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:16,padding:"16px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                   <div>
@@ -472,16 +567,22 @@ export default function WorkoutApp(){
                     <div style={{fontSize:11,color:T.sub}}>{r.kcal} kcal</div>
                   </div>
                 </div>
-                {r.itens.map((it: string,j: number)=>(<div key={j} style={{fontSize:14,color:"#ccc",paddingLeft:12,marginBottom:4,borderLeft:`2px solid ${T.br2}`}}>{it}</div>))}
+                {(Array.isArray(r.itens)?r.itens:[]).map((it: string,j: number)=>(<div key={j} style={{fontSize:14,color:"#ccc",paddingLeft:12,marginBottom:4,borderLeft:`2px solid ${T.br2}`}}>{it}</div>))}
               </div>
             ))}
+            {displayedMeals.length===0&&(
+              <div style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:16,padding:"24px 16px",marginBottom:10,textAlign:"center",fontSize:13,color:T.sub}}>
+                Nenhuma refeição cadastrada para este dia.
+              </div>
+            )}
+            {selectedNutriDay?.nota&&<div style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:14,padding:"14px 16px",marginBottom:10,fontSize:13,color:T.sub,lineHeight:1.6}}>{selectedNutriDay.nota}</div>}
             <div style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:14,padding:"14px 16px",marginBottom:10}}>
               <div style={{fontSize:14,fontWeight:700,marginBottom:8}}>💧 Hidratação</div>
               <div style={{fontSize:13,color:T.sub,lineHeight:1.6}}>{nutri.hidratacao}</div>
             </div>
             <div style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:14,padding:"14px 16px",marginBottom:10}}>
               <div style={{fontSize:14,fontWeight:700,marginBottom:8}}>💊 Suplementos</div>
-              {nutri.suplementos.map((s: string,i: number)=>(<div key={i} style={{fontSize:13,color:T.sub,marginBottom:6,paddingLeft:12,borderLeft:`2px solid ${T.br2}`}}>{s}</div>))}
+              {(Array.isArray(nutri.suplementos)?nutri.suplementos:[]).map((s: string,i: number)=>(<div key={i} style={{fontSize:13,color:T.sub,marginBottom:6,paddingLeft:12,borderLeft:`2px solid ${T.br2}`}}>{s}</div>))}
             </div>
             <div style={{background:T.accDk,border:`1px solid ${T.accMd}`,borderRadius:14,padding:"14px 16px",fontSize:13,color:T.acc,lineHeight:1.6}}>{nutri.nota}</div>
           </div>
