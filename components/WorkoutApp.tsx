@@ -139,7 +139,15 @@ export default function WorkoutApp(){
     setChatLd(false);
   };
 
-  const loadJSON=()=>{try{const p=JSON.parse(jsonIn);if(!p.dias)throw new Error("Faltou campo 'dias'");setData(p);setJsonErr("");setJsonIn("");setShowJson(false);}catch(e){setJsonErr((e as Error).message);}};
+  const loadJSON=()=>{
+    try{
+      const p=JSON.parse(jsonIn);
+      if(!p.dias&&!p.refeicoes)throw new Error("JSON deve ter 'dias' (treino) e/ou 'refeicoes' (nutrição).");
+      if(p.dias)setData(p);
+      if(p.refeicoes)setNutri((prev: typeof NUTRI)=>({...prev,...p}));
+      setJsonErr("");setJsonIn("");setShowJson(false);
+    }catch(e){setJsonErr((e as Error).message);}
+  };;
 
   const days=data.dias||[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -269,18 +277,34 @@ export default function WorkoutApp(){
                 📥 JSON
               </button>
             </div>
-            {showJson&&(
+            {showJson&&(()=>{
+              let parsed: Record<string,unknown>|null=null;
+              try{parsed=JSON.parse(jsonIn);}catch{}
+              const hasDias=!!(parsed&&parsed.dias);
+              const hasNutri=!!(parsed&&(parsed as Record<string,unknown>).refeicoes);
+              return(
               <div style={{background:T.s2,border:`1px solid ${T.br}`,borderRadius:14,padding:"14px",marginBottom:14}}>
-                <div style={{fontSize:13,color:T.sub,marginBottom:8}}>Cole o JSON gerado pelo Coach — ou auto-carrega quando o Coach gera um novo treino.</div>
-                <textarea value={jsonIn} onChange={e=>setJsonIn(e.target.value)} placeholder='{"fase_atual":"Build","dias":[]}'
+                <div style={{fontSize:13,color:T.sub,marginBottom:8,lineHeight:1.5}}>
+                  Cole o JSON gerado pelo Coach ou pelas skills.<br/>
+                  <span style={{color:"#aaa"}}>Aceita <strong style={{color:T.bl}}>treino</strong> (<code>dias</code>), <strong style={{color:T.or}}>nutrição</strong> (<code>refeicoes</code>) ou os dois juntos.</span>
+                </div>
+                {jsonIn&&(hasDias||hasNutri)&&(
+                  <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+                    {hasDias&&<span style={{fontSize:11,background:T.blDk,color:T.bl,border:`1px solid ${T.bl}33`,borderRadius:6,padding:"3px 10px",fontWeight:700}}>🏋 Treino detectado</span>}
+                    {hasNutri&&<span style={{fontSize:11,background:T.orDk,color:T.or,border:`1px solid ${T.or}33`,borderRadius:6,padding:"3px 10px",fontWeight:700}}>🥗 Nutrição detectada</span>}
+                  </div>
+                )}
+                <textarea value={jsonIn} onChange={e=>setJsonIn(e.target.value)}
+                  placeholder={'{\n  "dias": [...],\n  "refeicoes": [...]\n}'}
                   style={{width:"100%",height:140,background:T.s1,border:`1px solid ${T.br}`,borderRadius:10,padding:"10px",fontSize:12,color:T.txt,fontFamily:"monospace",resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
                 {jsonErr&&<div style={{color:T.rd,fontSize:12,margin:"6px 0"}}>{jsonErr}</div>}
-                <div style={{display:"flex",gap:8,marginTop:8}}>
+                <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
                   <button onClick={loadJSON} style={{background:T.acc,color:"#000",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:800,cursor:"pointer"}}>Carregar</button>
-                  <button onClick={()=>setJsonIn(JSON.stringify(data,null,2))} style={{background:"none",border:`1px solid ${T.br}`,color:T.sub,borderRadius:10,padding:"10px 14px",fontSize:13,cursor:"pointer"}}>Ver atual</button>
+                  <button onClick={()=>setJsonIn(JSON.stringify({...data,refeicoes:nutri.refeicoes,objetivo:nutri.objetivo,calorias:nutri.calorias,proteina_g:nutri.proteina_g,carbo_g:nutri.carbo_g,gordura_g:nutri.gordura_g,hidratacao:nutri.hidratacao,suplementos:nutri.suplementos,nota:nutri.nota},null,2))} style={{background:"none",border:`1px solid ${T.br}`,color:T.sub,borderRadius:10,padding:"10px 14px",fontSize:13,cursor:"pointer"}}>Ver treino+nutri atual</button>
                 </div>
               </div>
-            )}
+              );
+            })()}
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {days.map((day: any,di: number)=>{
               const{done,tot}=dayProg(day,st,di);
